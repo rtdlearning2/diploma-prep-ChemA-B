@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Course Catalog</title>
+  <style>
+    body {
+      font-family: system-ui, Arial, sans-serif;
+      background: #f9fafb;
+      color: #111;
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 24px;
+      color: #003DAE;
+    }
+    .hint {
+      text-align: center;
+      color: #555;
+      margin-bottom: 24px;
+    }
+    ul {
+      list-style: none;
+      padding-left: 20px;
+    }
+    li {
+      margin: 8px 0;
+    }
+    details {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 8px 12px;
+      margin: 8px 0;
+    }
+    summary {
+      cursor: pointer;
+      font-weight: 600;
+      color: #003DAE;
+      outline: none;
+    }
+    a {
+      text-decoration: none;
+      color: #0b57d0;
+      display: inline-block;
+      padding: 6px 0;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .muted {
+      color: #666;
+      font-size: 0.9em;
+    }
+  </style>
+</head>
+<body>
+  <h1>Course Catalog</h1>
+  <p class="hint">
+    This list is generated automatically from the repository folders.<br>
+    Add new courses and they will appear here.
+  </p>
+  <div id="tree">Loading…</div>
+
+  <script>
+    // --- Basic configuration ---
+    const OWNER = "rtdlearning2";   // your GitHub username
+    const REPO = "courses";         // repository name
+    const ROOT_PATH = "";           // root folder (empty means root)
+    const PAGES_BASE = `https://${OWNER}.github.io/${REPO}/`;
+
+    // --- Filters ---
+    const HIDE_NAMES = new Set([".git", ".github", ".nojekyll"]);
+    const INDEX_NAME = "index.html";
+
+    // --- Simple cache to avoid API rate limits ---
+    const CACHE_KEY = "courses_tree_cache_v1";
+    const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+
+    async function ghList(path) {
+      const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodeURIComponent(path)}`;
+      const res = await fetch(url, { headers: { "Accept": "application/vnd.github+json" }});
+      if (!res.ok) throw new Error(`GitHub API error ${res.status} at ${url}`);
+      return res.json();
+    }
+
+    async function folderHasIndex(path) {
+      try {
+        const items = await ghList(path);
+        return items.some(it => it.type === "file" && it.name.toLowerCase() === INDEX_NAME);
+      } catch (_) { return false; }
+    }
+
+    async function buildTree(path = "") {
+      const items = await ghList(path);
+      const dirs = items
+        .filter(it => it.type === "dir" && !HIDE_NAMES.has(it.name))
+        .sort((a, b) => a.name.localeCompare(b.name, 'en'));
+
+      const result = [];
+      for (const d of dirs) {
+        const subPath = path ? `${path}/${d.name}` : d.name;
+        const child = await buildTree(subPath);
+        const hasIndex = await folderHasIndex(subPath);
+        result.push({
+          name: d.name,
+          path: subPath,
+          hasIndex,
+          children: child
+        });
+      }
+      return result;
+    }
+
+    function toTitle(s) {
+      return s.replace(/[-_]/g, " ").replace(/\s+/g, " ").trim();
+    }
+
+    function renderNode(node) {
+      const title = toTitle(node.name);
+      const link = node.hasIndex ? `<a href="${PAGES_BASE}${node.path}/">${title}</a>` : `<span class="muted">${title}</span>`;
+      if (!node.children.length) {
+        return `<li>${link}${node.hasIndex ? "" : " <span class='muted'>(no index.html)</span>"}</li>`;
+      }
+      return `
+        <li>
+          <details>
+            <summary>${link}${node.hasIndex ? "" : " <span class='muted'>(section)</span>"}</summary>
+            <ul>
+              ${node.children.map(renderNode).join("")}
+            </ul>
+          </details>
+        </li>
+      `;
+    }
+
+    function renderTree(tree) {
+      if (!tree.length) return "<p>No folders found. Add course folders to the repository.</p>";
+      return `<ul>${tree.map(renderNode).join("")}</ul>`;
+    }
+
+    async function init() {
+      const el = document.getElementById("tree");
+
+      try {
+        const cached = JSON.parse(sessionStorage.getItem(CACHE_KEY) || "null");
+        if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+          el.innerHTML = renderTree(cached.tree);
+          buildTree(ROOT_PATH).then(tree => {
+            sessionStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), tree }));
+          }).catch(()=>{});
+          return;
+        }
+      } catch {}
+
+      try {
+        const tree = await buildTree(ROOT_PATH);
+        el.innerHTML = renderTree(tree);
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), tree }));
+      } catch (e) {
+        el.innerHTML = `<p>Failed to load catalog. ${e.message}</p>`;
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
