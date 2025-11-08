@@ -132,6 +132,107 @@
   }, 100);
 })();
 </script>
+<script>
+(function(){
+  // кандидаты имён методов в разных сборках iSpring
+  const NEXT = ["switchToNextSlide","switchToNextStep","goToNext","next","moveToNext"];
+  const PREV = ["switchToPreviousSlide","switchToPreviousStep","goToPrevious","previous","prev","moveToPrevious"];
+
+  // безопасный обход графа объектов (до глубины 4), без зацикливания
+  function deepFindRoots(){
+    const roots = [window];
+    // иногда плеер живёт в глобальных реестрах
+    ["__ISPRING__", "__APP__", "__PLAYER__", "app", "player", "PresentationPlayer"].forEach(k=>{
+      try{ if (window[k]) roots.push(window[k]); }catch(_){}
+    });
+    return roots;
+  }
+
+  function findPlayerDeep(maxDepth=4){
+    const seen = new WeakSet();
+    const queue = [];
+    for (const r of deepFindRoots()){
+      if (r && typeof r === "object" && !seen.has(r)) { queue.push({v:r, path:["window"]}); seen.add(r); }
+    }
+
+    while (queue.length){
+      const {v, path} = queue.shift();
+      try{
+        // проверяем методы на текущем объекте
+        const hasNext = NEXT.find(n => typeof v[n] === "function");
+        const hasPrev = PREV.find(n => typeof v[n] === "function");
+        if (hasNext && hasPrev){
+          console.log("[force-deep-nav] FOUND:", path.join("."), "next:", hasNext, "prev:", hasPrev);
+          return {obj:v, nextName:hasNext, prevName:hasPrev};
+        }
+
+        // углубляемся
+        if (path.length <= maxDepth){
+          const keys = Object.keys(v);
+          for (const k of keys){
+            let nv;
+            try{ nv = v[k]; }catch(_){ continue; }
+            if (!nv || typeof nv !== "object") continue;
+            if (seen.has(nv)) continue;
+            seen.add(nv);
+            queue.push({v:nv, path: path.concat(k)});
+          }
+        }
+      }catch(_){}
+    }
+    return null;
+  }
+
+  let found = null;
+
+  function callNext(){
+    if (!found) return;
+    try{ found.obj[found.nextName](); }catch(e){ console.warn("[force-deep-nav] next err", e); }
+  }
+  function callPrev(){
+    if (!found) return;
+    try{ found.obj[found.prevName](); }catch(e){ console.warn("[force-deep-nav] prev err", e); }
+  }
+
+  function enableButtons(){
+    const norm = s => (s||"").toLowerCase().trim();
+    const all = Array.from(document.querySelectorAll('button,[role="button"],[aria-label],[title]'));
+    all.forEach(el=>{
+      const txt = norm(el.getAttribute("aria-label")||el.getAttribute("title")||el.textContent);
+      const isNext = /^(next|forward|далее|дальше|вперёд)$/.test(txt);
+      const isPrev = /^(prev|previous|back|назад)$/.test(txt);
+      if (!isNext && !isPrev) return;
+
+      el.removeAttribute("disabled");
+      el.style.pointerEvents = "auto";
+      el.classList && ["disabled","is-disabled","locked"].forEach(c=>el.classList.remove(c));
+
+      if (!el.__forcedNav){
+        el.addEventListener("click", function(e){
+          e.stopPropagation();
+          isNext ? callNext() : callPrev();
+        }, true);
+        el.__forcedNav = true;
+      }
+    });
+  }
+
+  // горячие клавиши
+  document.addEventListener("keydown", function(e){
+    if (e.key === "ArrowRight"){ e.stopPropagation(); callNext(); }
+    if (e.key === "ArrowLeft"){  e.stopPropagation(); callPrev();  }
+  }, true);
+
+  // основной цикл: ждём появление объектов и UI, до 30с
+  let tries = 0;
+  const iv = setInterval(function(){
+    tries++;
+    if (!found) found = findPlayerDeep(4);
+    if (found) enableButtons();
+    if (tries > 300){ clearInterval(iv); }
+  }, 100);
+})();
+</script>
 
 	
 	<div id="preloader"></div>
