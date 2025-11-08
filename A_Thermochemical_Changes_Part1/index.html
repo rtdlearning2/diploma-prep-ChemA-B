@@ -53,11 +53,90 @@
 <script src="request-tap.js?v=1"></script>
 
 <!-- как и было -->
-<script src="data/player.js?v=2025-11-07-8"></script>
+<script src="data/player.js?v=2025-11-07-9"></script>
+
+	<!-- после player.js -->
+<script>
+(function(){
+  // Ищем в window объект плеера с методами переключения
+  function findPlayer(){
+    for (const k in window){
+      try{
+        const v = window[k];
+        if (!v || typeof v !== "object") continue;
+        const hasNext  = typeof v.switchToNextSlide === "function" || typeof v.switchToNextStep === "function";
+        const hasPrev  = typeof v.switchToPreviousSlide === "function" || typeof v.switchToPreviousStep === "function";
+        const hasPlay  = typeof v.play === "function" || typeof v.playSlide === "function";
+        if (hasNext && hasPrev) return v;
+      }catch(_){}
+    }
+    return null;
+  }
+
+  function callNext(p){
+    if (p.switchToNextSlide) p.switchToNextSlide();
+    else if (p.switchToNextStep) p.switchToNextStep();
+  }
+  function callPrev(p){
+    if (p.switchToPreviousSlide) p.switchToPreviousSlide();
+    else if (p.switchToPreviousStep) p.switchToPreviousStep();
+  }
+
+  // Снимаем «некликабельность» с кнопок и вешаем явные вызовы API
+  function wireButtons(p){
+    const q = (sel)=>Array.from(document.querySelectorAll(sel));
+    const nextBtns = q('[aria-label="Next"], [title="Next"], button, [role="button"]').filter(el=>{
+      const t=(el.getAttribute('aria-label')||el.getAttribute('title')||el.textContent||'').trim().toLowerCase();
+      return /^(next|forward|далее|дальше|вперёд)$/.test(t);
+    });
+    const prevBtns = q('[aria-label="Previous"], [title="Previous"], button, [role="button"]').filter(el=>{
+      const t=(el.getAttribute('aria-label')||el.getAttribute('title')||el.textContent||'').trim().toLowerCase();
+      return /^(prev|previous|back|назад)$/.test(t);
+    });
+
+    [...nextBtns, ...prevBtns].forEach(el=>{
+      el.removeAttribute('disabled');
+      el.style.pointerEvents = 'auto';
+      el.classList && ['disabled','is-disabled','locked'].forEach(c=>el.classList.remove(c));
+    });
+
+    nextBtns.forEach(el=>{
+      if (el.__forceNav) return;
+      el.addEventListener('click', function(e){ e.stopPropagation(); callNext(p); }, true);
+      el.__forceNav = true;
+    });
+    prevBtns.forEach(el=>{
+      if (el.__forceNav) return;
+      el.addEventListener('click', function(e){ e.stopPropagation(); callPrev(p); }, true);
+      el.__forceNav = true;
+    });
+  }
+
+  // Горячие клавиши — всегда работоспособные
+  function wireKeys(p){
+    document.addEventListener('keydown', function(e){
+      if (e.key === 'ArrowRight'){ e.stopPropagation(); callNext(p); }
+      if (e.key === 'ArrowLeft'){  e.stopPropagation(); callPrev(p); }
+    }, true);
+  }
+
+  // Пытаемся найти плеер и провязать всё, в т.ч. если UI дорисуется позже
+  let tries = 0, player = null;
+  const iv = setInterval(function(){
+    tries++;
+    if (!player) player = findPlayer();
+    if (player){
+      try { wireButtons(player); wireKeys(player); } catch(_){}
+    }
+    if (tries > 300){ clearInterval(iv); } // ~30 секунд
+  }, 100);
+})();
+</script>
+
 	
 	<div id="preloader"></div>
 	<script src="data/browsersupport.js?92682624"></script>
-	<script src="data/player.js?v=2025-11-07-8"></script>
+	<script src="data/player.js?v=2025-11-07-9"></script>
     <div id="content"></div>
     <div id="spr0_5a714c2"></div>
     <script>
