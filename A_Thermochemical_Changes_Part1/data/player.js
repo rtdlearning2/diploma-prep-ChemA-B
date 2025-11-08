@@ -1770,4 +1770,94 @@ function RGBColor_(e){this.ok=!1,e.charAt(0)=="#"&&(e=e.substr(1,6)),e=e.replace
   }catch(e){}
 })();
 
+;
+/*! nav-unlock-ui: force-enable Next/Prev buttons and simulate Arrow keys */
+(function(){
+  function log(){ try{ console.log.apply(console, arguments); }catch(_){ } }
+
+  // try to always allow IH if visible in global scope
+  try{ if (typeof window!=="undefined"){ window.IH = function(){ return !1 }; } }catch(_){}
+
+  function clickByKey(key){
+    try{
+      const evDown = new KeyboardEvent("keydown",{bubbles:true,cancelable:true,key:key,code:key==="ArrowRight"?"ArrowRight":"ArrowLeft",keyCode:key==="ArrowRight"?39:37,which:key==="ArrowRight"?39:37});
+      const evUp = new KeyboardEvent("keyup",{bubbles:true,cancelable:true,key:key,code:key==="ArrowRight"?"ArrowRight":"ArrowLeft",keyCode:key==="ArrowRight"?39:37,which:key==="ArrowRight"?39:37});
+      document.dispatchEvent(evDown);
+      document.dispatchEvent(evUp);
+    }catch(_){}
+  }
+
+  function enableBtn(el){
+    try{
+      el.removeAttribute("disabled");
+      el.classList && ["disabled","is-disabled","locked"].forEach(c=>el.classList.remove(c));
+      el.style && (el.style.pointerEvents = "auto");
+    }catch(_){}
+  }
+
+  function findBtns(){
+    const all = Array.from(document.querySelectorAll('button, [role="button"], .btn, .control, [aria-label], [title]'));
+    const res = { next: [], prev: [] };
+    all.forEach(el=>{
+      const txt = (el.getAttribute("aria-label")||el.getAttribute("title")||el.textContent||"").toLowerCase().trim();
+      if (/^(next|forward|вперёд|далее|дальше)$/.test(txt)) res.next.push(el);
+      if (/^(prev|previous|back|назад)$/.test(txt)) res.prev.push(el);
+    });
+    // fallback: look by tooltip icons
+    if (!res.next.length){
+      const n = document.querySelector('[data-tooltip="Next"], [data-tooltip="next"]');
+      if (n) res.next.push(n);
+    }
+    if (!res.prev.length){
+      const p = document.querySelector('[data-tooltip="Previous"], [data-tooltip="Back"], [data-tooltip="previous"]');
+      if (p) res.prev.push(p);
+    }
+    return res;
+  }
+
+  function patch(){
+
+    const { next, prev } = findBtns();
+    let touched = false;
+
+    next.forEach(el=>{
+      enableBtn(el);
+      if (!el.__navUnlocked){
+        el.addEventListener("click", function(e){
+          // If player blocks the click, simulate ArrowRight
+          try{ clickByKey("ArrowRight"); }catch(_){}
+        }, true);
+        el.__navUnlocked = true;
+      }
+      touched = true;
+    });
+
+    prev.forEach(el=>{
+      enableBtn(el);
+      if (!el.__navUnlocked){
+        el.addEventListener("click", function(e){
+          try{ clickByKey("ArrowLeft"); }catch(_){}
+        }, true);
+        el.__navUnlocked = true;
+      }
+      touched = true;
+    });
+
+    return touched;
+  }
+
+  // Run repeatedly for a while to catch late UI creation
+  let tries = 0;
+  const iv = setInterval(function(){
+    tries++;
+    const ok = patch();
+    if (ok || tries > 200){ clearInterval(iv); }
+  }, 100);
+
+  // As a backup, bind keyboard shortcuts globally (just in case)
+  document.addEventListener("keydown", function(e){
+    if (e.key === "ArrowRight"){ e.stopPropagation(); /* allow */ }
+    if (e.key === "ArrowLeft"){ e.stopPropagation(); /* allow */ }
+  }, true);
+})();
 
