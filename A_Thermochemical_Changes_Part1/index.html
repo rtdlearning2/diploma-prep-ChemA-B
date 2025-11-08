@@ -50,7 +50,7 @@
 <body>
 	<div id="preloader"></div>
 	<script src="data/browsersupport.js?92682624"></script>
-	<script src="data/player.js?92682624"></script>
+	<script src="data/player.js?v=2025-11-07-2"></script>
     <div id="content"></div>
     <div id="spr0_5a714c2"></div>
     <script>
@@ -115,22 +115,6 @@
 		})());
     </script>
 
-<script>
-(function patch(){
-  try {
-    // В iSpring у контроллера воспроизведения есть класс Lx с методом Ne(...)
-    if (typeof Lx !== 'undefined' && Lx.prototype && typeof Lx.prototype.Ne === 'function') {
-      Lx.prototype.Ne = function(){ return null; }; // всегда «разрешено»
-      console.log('[unlock] Patched Lx.prototype.Ne');
-      return;
-    }
-  } catch(e) {}
-  // если Lx ещё не загружен — пробуем чуть позже
-  setTimeout(patch, 200);
-})();
-</script>
-
-<script src="unlock.js?v=1" defer></script>
 	
 </body>
 </html>
