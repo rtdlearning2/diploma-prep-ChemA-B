@@ -53,11 +53,122 @@
 <script src="request-tap.js?v=1"></script>
 
 <!-- как и было -->
-<script src="data/player.js?v=2025-11-07-5"></script>
+<script src="data/player.js?v=2025-11-07-11"></script>
+
+	<script>
+(function(){
+  // кандидаты имён методов
+  const NEXT = ["switchToNextSlide","switchToNextStep","goToNext","next","moveToNext"];
+  const PREV = ["switchToPreviousSlide","switchToPreviousStep","goToPrevious","previous","prev","moveToPrevious"];
+
+  function findPlayerDeep(root, maxDepth){
+    const seen = new WeakSet();
+    const q = [];
+    if (root && typeof root === "object") { q.push({v:root, path:["<root>"]}); seen.add(root); }
+    while (q.length){
+      const {v, path} = q.shift();
+      try{
+        const n = NEXT.find(k => typeof v[k] === "function");
+        const p = PREV.find(k => typeof v[k] === "function");
+        if (n && p){
+          console.log("[force-deep-nav] FOUND at", path.join("."), "next:", n, "prev:", p);
+          return {obj:v, nextName:n, prevName:p};
+        }
+        if (path.length <= maxDepth){
+          const keys = Object.keys(v);
+          for (const k of keys){
+            let nv; try{ nv = v[k]; }catch(_){ continue; }
+            if (!nv || typeof nv !== "object") continue;
+            if (seen.has(nv)) continue;
+            seen.add(nv);
+            q.push({v:nv, path: path.concat(k)});
+          }
+        }
+      }catch(_){}
+    }
+    return null;
+  }
+
+  function enableButtons(doc, callNext, callPrev){
+    const norm = s => (s||"").toLowerCase().trim();
+    const all = Array.from(doc.querySelectorAll('button,[role="button"],[aria-label],[title]'));
+    all.forEach(el=>{
+      const txt = norm(el.getAttribute("aria-label")||el.getAttribute("title")||el.textContent);
+      const isNext = /^(next|forward|далее|дальше|вперёд)$/.test(txt);
+      const isPrev = /^(prev|previous|back|назад)$/.test(txt);
+      if (!isNext && !isPrev) return;
+      try{
+        el.removeAttribute("disabled");
+        el.style.pointerEvents = "auto";
+        el.classList && ["disabled","is-disabled","locked"].forEach(c=>el.classList.remove(c));
+        if (!el.__forcedNav){
+          el.addEventListener("click", function(e){ e.stopPropagation(); (isNext?callNext:callPrev)(); }, true);
+          el.__forcedNav = true;
+        }
+      }catch(_){}
+    });
+  }
+
+  function wireInWindow(targetWin){
+    try{
+      const doc = targetWin.document;
+      let found = null;
+
+      function callNext(){ if (found) try{ found.obj[found.nextName](); }catch(e){ console.warn("[force-deep-nav] next err", e);} }
+      function callPrev(){ if (found) try{ found.obj[found.prevName](); }catch(e){ console.warn("[force-deep-nav] prev err", e);} }
+
+      // горячие клавиши в самом фрейме
+      doc.addEventListener("keydown", function(e){
+        if (e.key === "ArrowRight"){ e.stopPropagation(); callNext(); }
+        if (e.key === "ArrowLeft"){  e.stopPropagation(); callPrev(); }
+      }, true);
+
+      let tries = 0;
+      const iv = targetWin.setInterval(function(){
+        tries++;
+        if (!found) found = findPlayerDeep(targetWin, 8);
+        if (found){
+          enableButtons(doc, callNext, callPrev);
+        }
+        if (tries > 400){ targetWin.clearInterval(iv); } // ~40 сек
+      }, 100);
+    }catch(e){
+      console.warn("[force-deep-nav] wireInWindow error", e);
+    }
+  }
+
+  // 1) провяжемся в текущем окне
+  wireInWindow(window);
+
+  // 2) и во все доступные iframe того же происхождения
+  function wireAllIframes(){
+    const iframes = document.querySelectorAll("iframe");
+    iframes.forEach(fr=>{
+      try{
+        if (fr.contentWindow && fr.contentWindow.document){
+          wireInWindow(fr.contentWindow);
+        }
+      }catch(e){
+        // кросс-домен — пропускаем
+      }
+    });
+  }
+
+  // один раз и с повтором, если фреймы появляются позже
+  wireAllIframes();
+  let ct = 0;
+  const scanIv = setInterval(function(){
+    ct++; wireAllIframes();
+    if (ct > 60) clearInterval(scanIv); // минутка поиска фреймов
+  }, 1000);
+})();
+</script>
+
+
 	
 	<div id="preloader"></div>
 	<script src="data/browsersupport.js?92682624"></script>
-	<script src="data/player.js?v=2025-11-07-5"></script>
+	<script src="data/player.js?v=2025-11-07-11"></script>
     <div id="content"></div>
     <div id="spr0_5a714c2"></div>
     <script>
